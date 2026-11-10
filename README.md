@@ -16,7 +16,7 @@ segmentation → GANs → face recognition.
 | VOC download, XML → YOLO conversion, splits | Done |
 | Dataset statistics, box visualization, anchor analysis | Done |
 | YOLOv8 training + quick validation + loss/mAP curves | Implemented (notebook) |
-| Full VOC training run | Pending |
+| Full VOC training run | Done — 50 epochs, mAP@0.5 0.826 |
 | Evaluation notebook (PR curves, per-class mAP, confusion matrix) | Planned |
 | Error-analysis notebook | Planned |
 | Inference CLI (image / video / webcam) | Planned |
@@ -194,12 +194,16 @@ Planned:
 
 ## Results
 
-Fill this in after the full training run:
+Full official VOC split, 50 epochs, seed 42, best checkpoint at epoch 49.
 
 | Model | Dataset | mAP@0.5 | mAP@0.5:0.95 | Precision | Recall | Notes |
 |-------|---------|---------|--------------|-----------|--------|-------|
 | YOLOv8n | VOC quick | — | — | — | — | pipeline smoke run |
-| YOLOv8n | VOC full | — | — | — | — | pending |
+| YOLOv8n | VOC full | 0.826 | 0.617 | 0.812 | 0.749 | 50 epochs, best epoch 49 |
+
+Training curves, PR/F1/precision/recall curves, and confusion matrices are in
+`results/`; raw metrics are in `results/metrics.json`. Validation sample grids are
+in `results/samples/`.
 
 Artifacts are written to `results/`; large run folders and model weights are
 gitignored.
