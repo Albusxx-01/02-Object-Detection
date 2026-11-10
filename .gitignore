@@ -12,6 +12,7 @@ models/*.pt
 models/*.pth
 models/*.onnx
 results/runs/
+results/*.zip
 
 *.mp4
 *.avi
