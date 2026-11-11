@@ -15,9 +15,9 @@ segmentation → GANs → face recognition.
 | Project scaffold, config, requirements | Done |
 | VOC download, XML → YOLO conversion, splits | Done |
 | Dataset statistics, box visualization, anchor analysis | Done |
-| YOLOv8 training + quick validation + loss/mAP curves | Implemented (notebook) |
+| YOLOv8 training + quick validation + loss/mAP curves | Implemented (`src/train.py`, notebook 01) |
 | Full VOC training run | Pending |
-| Evaluation notebook (PR curves, per-class mAP, confusion matrix) | Planned |
+| Evaluation CLI + notebook (PR curves, per-class mAP, confusion matrix) | Implemented (`src/evaluate.py`, notebook 02) |
 | Error-analysis notebook | Planned |
 | Inference CLI (image / video / webcam) | Planned |
 | Streamlit app | Planned |
@@ -75,6 +75,16 @@ python src/dataset.py
 This downloads the archives, converts annotations, and writes reproducible split
 lists to `data/splits/`.
 
+### Evaluate a checkpoint
+
+```bash
+python src/evaluate.py --weights models/yolov8n_voc_best.pt
+python src/loss.py --csv results/results.csv
+```
+
+`src/evaluate.py` writes `results/metrics.json` and exports PR/F1/confusion
+artifacts into `results/`. `src/loss.py` writes `results/loss_curves.png`.
+
 ## Project Structure
 
 ```
@@ -85,13 +95,14 @@ lists to `data/splits/`.
 ├── src/
 │   ├── config.py               # paths, constants, dataset YAML generation
 │   ├── dataset.py              # VOC download, XML->YOLO, splits, stats, visualization
-│   ├── model.py                # planned: YOLO model loader
-│   ├── train.py                # planned: training wrapper
-│   ├── evaluate.py             # planned: mAP and artifact export
-│   ├── loss.py                 # planned: loss-curve plotting
+│   ├── model.py                # YOLO model loader
+│   ├── train.py                # training wrapper with run directories
+│   ├── evaluate.py             # mAP metrics and artifact export
+│   ├── loss.py                 # loss-curve plotting
 │   └── infer.py                # planned: image/video/webcam inference
 ├── notebooks/
-│   └── 01-data-and-training.ipynb
+│   ├── 01-data-and-training.ipynb
+│   └── 02-evaluation.ipynb
 ├── data/                       # generated, gitignored
 │   ├── images/{train,val}/
 │   ├── labels/{train,val}/
@@ -176,13 +187,16 @@ accuracy higher at the cost of speed.
 
 ## Evaluation
 
-Planned metrics and artifacts:
+`src/evaluate.py` and `notebooks/02-evaluation.ipynb` report:
 
 - mAP@0.5 and mAP@0.5:0.95
 - Precision, recall, and per-class AP
-- Precision-recall curves and F1 curve
+- Precision-recall, F1, precision, and recall curves
 - Confusion matrix
-- False-positive / false-negative error analysis
+- Validation speed per image
+
+Error analysis for false positives and false negatives is planned for
+`03-error-analysis.ipynb`.
 
 ## Inference and App
 
@@ -219,12 +233,13 @@ gitignored.
 - [x] Milestone 1 — Dataset prep (download, XML → YOLO, split, visualize)
 - [x] Milestone 2 — Config + anchor analysis
 - [x] Milestone 3 — Training notebook, quick validation, loss/mAP curves
-- [ ] Milestone 4 — Evaluation (mAP, PR curves, per-class report)
+- [x] Milestone 4 — Evaluation pipeline (mAP, PR curves, per-class report)
 - [ ] Milestone 5 — Inference CLI and Streamlit app
 - [ ] Milestone 6 — Full training run, results, final documentation
 
 ## Notes
 
 - Python 3.13 with Ultralytics 8.4 and PyTorch 2.14 (CPU) was used for local checks.
-- `data/`, `models/*.pt`, and `results/runs/` are gitignored.
+- `data/`, `models/*.pt`, `results/runs/`, `results/yolov8_results/`, and
+  `results/*.zip` are gitignored.
 - Full VOC download is about 2.8 GB; the quick run downloads about 884 MB.
