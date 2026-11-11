@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 from pathlib import Path
 
-from config import RESULTS_DIR
+from config import RESULTS_DIR, ROOT_DIR
 from model import load_model
 from train import resolve_data
 
@@ -15,6 +16,16 @@ METRIC_KEYS = {
     "recall": "metrics/recall(B)",
     "mAP50": "metrics/mAP50(B)",
     "mAP50-95": "metrics/mAP50-95(B)",
+}
+
+ARTIFACT_FILES = {
+    "pr_curve": "BoxPR_curve.png",
+    "f1_curve": "BoxF1_curve.png",
+    "precision_curve": "BoxP_curve.png",
+    "recall_curve": "BoxR_curve.png",
+    "confusion_matrix": "confusion_matrix.png",
+    "confusion_matrix_normalized": "confusion_matrix_normalized.png",
+    "results_csv": "results.csv",
 }
 
 
@@ -39,6 +50,35 @@ def per_class_ap(metrics) -> dict[str, float]:
         return {}
 
     return {str(name): float(ap) for name, ap in zip(names, maps)}
+
+
+def _display_path(path: Path) -> str:
+    """Return a project-relative path when possible."""
+    try:
+        return path.resolve().relative_to(ROOT_DIR).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def export_artifacts(
+    run_dir: str | Path,
+    out_dir: str | Path = RESULTS_DIR,
+) -> dict[str, str]:
+    """Copy PR curves, confusion matrices, and results.csv into results/."""
+    run_dir = Path(run_dir)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    exported = {}
+    for key, filename in ARTIFACT_FILES.items():
+        source = run_dir / filename
+        if not source.exists():
+            continue
+        destination = out_dir / filename
+        shutil.copy2(source, destination)
+        exported[key] = _display_path(destination)
+
+    return exported
 
 
 def save_metrics(payload: dict, out_path: Path) -> Path:
@@ -89,6 +129,7 @@ def evaluate_model(
             key: float(value)
             for key, value in getattr(metrics, "speed", {}).items()
         },
+        "artifacts": export_artifacts(run_dir),
     }
 
     out_path = Path(out_path) if out_path is not None else RESULTS_DIR / "metrics.json"
