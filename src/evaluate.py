@@ -6,6 +6,7 @@ import argparse
 import json
 import shutil
 from pathlib import Path
+from typing import Any
 
 from config import RESULTS_DIR, ROOT_DIR
 from model import load_model
@@ -29,7 +30,7 @@ ARTIFACT_FILES = {
 }
 
 
-def extract_metrics(metrics) -> dict[str, float]:
+def extract_metrics(metrics: Any) -> dict[str, float]:
     """Map Ultralytics result keys to stable, short metric names."""
     results = getattr(metrics, "results_dict", {})
     return {
@@ -39,7 +40,7 @@ def extract_metrics(metrics) -> dict[str, float]:
     }
 
 
-def per_class_ap(metrics) -> dict[str, float]:
+def per_class_ap(metrics: Any) -> dict[str, float]:
     """Return per-class mAP@0.5:0.95 from a validation result."""
     names = getattr(metrics, "names", [])
     if isinstance(names, dict):
@@ -81,7 +82,7 @@ def export_artifacts(
     return exported
 
 
-def save_metrics(payload: dict, out_path: Path) -> Path:
+def save_metrics(payload: dict[str, Any], out_path: Path) -> Path:
     """Write a metrics payload as indented JSON."""
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -100,7 +101,7 @@ def evaluate_model(
     project: str | Path | None = None,
     name: str = "yolov8n_voc_val",
     out_path: str | Path | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Run validation and write results/metrics.json."""
     data_path = resolve_data(data)
     project = Path(project) if project is not None else RESULTS_DIR / "runs"

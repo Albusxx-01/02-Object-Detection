@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from typing import Any
 
 from config import MODELS_DIR
 
@@ -31,14 +32,14 @@ def resolve_weights(weights: str | Path = "n") -> str:
     return value
 
 
-def load_model(weights: str | Path = "n"):
+def load_model(weights: str | Path = "n") -> Any:
     """Load a YOLO model from a variant key, checkpoint name, or path."""
     from ultralytics import YOLO
 
     return YOLO(resolve_weights(weights))
 
 
-def class_names(model) -> list[str]:
+def class_names(model: Any) -> list[str]:
     """Return the model's class names ordered by class id."""
     names = model.names
     if isinstance(names, dict):

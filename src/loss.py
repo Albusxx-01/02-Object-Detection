@@ -33,7 +33,9 @@ def plot_losses(
     csv_path = Path(csv_path)
     history = load_history(csv_path)
 
-    out_path = Path(out_path) if out_path is not None else RESULTS_DIR / "loss_curves.png"
+    out_path = (
+        Path(out_path) if out_path is not None else RESULTS_DIR / "loss_curves.png"
+    )
     fig, axes = plt.subplots(1, 3, figsize=(16, 4))
 
     for ax, (group, columns) in zip(axes, LOSS_GROUPS.items()):

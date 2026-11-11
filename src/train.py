@@ -5,11 +5,11 @@ from __future__ import annotations
 import argparse
 import shutil
 from pathlib import Path
+from typing import Any
 
 from config import (
     DATASET_YAML_PATH,
     MODELS_DIR,
-    RESULTS_DIR,
     get_training_args,
     write_dataset_yaml,
 )
@@ -20,8 +20,9 @@ def resolve_data(data: str | Path | None = None) -> Path:
     """Return an existing dataset YAML, generating the project default if needed."""
     if data is not None:
         path = Path(data)
-        if path.exists():
-            return path
+        if not path.exists():
+            raise FileNotFoundError(f"Dataset YAML not found: {path}")
+        return path
     if DATASET_YAML_PATH.exists():
         return DATASET_YAML_PATH
     return write_dataset_yaml()
@@ -30,8 +31,8 @@ def resolve_data(data: str | Path | None = None) -> Path:
 def train_model(
     weights: str | Path | None = None,
     data: str | Path | None = None,
-    **overrides,
-) -> dict:
+    **overrides: Any,
+) -> dict[str, Any]:
     """Train a YOLO model and copy the best checkpoint into models/."""
     args = get_training_args()
     configured_model = args.pop("model", "yolov8n.pt")
@@ -44,12 +45,11 @@ def train_model(
     model = load_model(weights or configured_model)
     results = model.train(data=str(data_path), **args)
 
-    project = Path(args.get("project", RESULTS_DIR / "runs"))
-    run_dir = Path(
-        getattr(results, "save_dir", project / args.get("name", "train"))
-    )
+    project = Path(args["project"])
+    name = args["name"]
+    run_dir = Path(getattr(results, "save_dir", project / name))
     best_weights = run_dir / "weights" / "best.pt"
-    checkpoint = MODELS_DIR / f"{args.get('name', 'yolov8n')}_best.pt"
+    checkpoint = MODELS_DIR / f"{name}_best.pt"
 
     if best_weights.exists():
         MODELS_DIR.mkdir(parents=True, exist_ok=True)
