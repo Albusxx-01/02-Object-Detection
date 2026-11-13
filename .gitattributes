@@ -6,6 +6,8 @@
 *.yml text eol=lf
 *.json text eol=lf
 *.ipynb text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
 
 *.pt binary
 *.pth binary
