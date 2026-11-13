@@ -115,6 +115,67 @@ def infer_image(
     }
 
 
+def infer_video(
+    source: str | Path,
+    weights: str | Path = "n",
+    out_dir: str | Path = PREDICTIONS_DIR,
+    conf: float = DEFAULT_CONF,
+    iou: float = DEFAULT_IOU,
+    imgsz: int = DEFAULT_IMGSZ,
+    max_det: int = DEFAULT_MAX_DET,
+    device: str | None = None,
+    save: bool = True,
+) -> dict[str, Any]:
+    """Run detection on a video and write an annotated video."""
+    source = Path(source)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    model = load_model(weights)
+    results = model.predict(
+        source=str(source),
+        save=save,
+        project=str(out_dir),
+        name=source.stem,
+        exist_ok=True,
+        stream=True,
+        **prediction_args(conf, iou, imgsz, max_det, device),
+    )
+
+    save_dir = None
+    frames = 0
+    for result in results:
+        save_dir = getattr(result, "save_dir", save_dir)
+        frames += 1
+
+    annotated = None
+    if save and save_dir is not None:
+        candidates = sorted(
+            path
+            for path in Path(save_dir).iterdir()
+            if path.suffix.lower() in VIDEO_SUFFIXES
+        )
+        if candidates:
+            annotated = candidates[0]
+
+    payload = {
+        "source": str(source),
+        "weights": str(weights),
+        "video": _display_path(annotated) if annotated is not None else None,
+        "frames": frames,
+    }
+    detections_path = out_dir / f"{source.stem}.json"
+    detections_path.write_text(
+        json.dumps(payload, indent=2) + "\n", encoding="utf-8"
+    )
+
+    return {
+        "annotated": annotated,
+        "detections": detections_path,
+        "payload": payload,
+    }
+
+
 def infer(
     source: str | int,
     weights: str | Path = "n",
@@ -128,6 +189,18 @@ def infer(
 ) -> dict[str, Any]:
     """Dispatch inference by source type."""
     path = Path(str(source))
+    if path.suffix.lower() in VIDEO_SUFFIXES:
+        return infer_video(
+            path,
+            weights=weights,
+            out_dir=out_dir,
+            conf=conf,
+            iou=iou,
+            imgsz=imgsz,
+            max_det=max_det,
+            device=device,
+            save=save,
+        )
     if path.suffix.lower() in IMAGE_SUFFIXES:
         return infer_image(
             path,
@@ -181,7 +254,10 @@ def main() -> None:
         save=args.save,
     )
 
-    print("Detections:", len(output["payload"]["detections"]))
+    if "detections" in output["payload"]:
+        print("Detections:", len(output["payload"]["detections"]))
+    else:
+        print("Frames:", output["payload"]["frames"])
     print("Annotated:", output["annotated"])
     print("JSON:", output["detections"])
 
