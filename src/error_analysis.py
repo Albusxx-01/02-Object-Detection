@@ -8,15 +8,22 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+import matplotlib.pyplot as plt
 import numpy as np
 
 from config import DATA_DIR, INFERENCE, RESULTS_DIR
 from dataset import load_label_file
+from evaluate import extract_metrics
 from model import class_names, load_model
+from train import resolve_data
 
 DEFAULT_CONF = float(INFERENCE.get("conf", 0.25))
 DEFAULT_IOU = float(INFERENCE.get("iou", 0.45))
 DEFAULT_IMGSZ = int(INFERENCE.get("imgsz", 640))
+
+CONF_SWEEP_VALUES = [round(0.05 * index, 2) for index in range(1, 20)]
+IOU_SWEEP_VALUES = [round(0.1 * index, 2) for index in range(3, 10)]
+SWEEP_METRICS = ("precision", "recall", "mAP50", "mAP50-95")
 
 SIZE_BUCKETS = (
     (0.0, 0.01, "tiny"),
@@ -309,6 +316,98 @@ def collect_error_analysis(
     }
 
 
+def sweep_thresholds(
+    weights: str | Path = "models/yolov8n_voc_best.pt",
+    data: str | Path | None = None,
+    parameter: str = "conf",
+    values: list[float] | None = None,
+    imgsz: int = DEFAULT_IMGSZ,
+    batch: int = 16,
+    device: str | None = None,
+) -> list[dict[str, float]]:
+    """Run validation across confidence or NMS IoU values."""
+    if parameter not in {"conf", "iou"}:
+        raise ValueError(f"Unsupported sweep parameter: {parameter}")
+
+    data_path = resolve_data(data)
+    model = load_model(weights)
+    sweep_values = values or (
+        CONF_SWEEP_VALUES if parameter == "conf" else IOU_SWEEP_VALUES
+    )
+
+    rows = []
+    for value in sweep_values:
+        kwargs = {
+            "data": str(data_path),
+            "imgsz": imgsz,
+            "batch": batch,
+            "plots": False,
+            "verbose": False,
+            "project": str(RESULTS_DIR / "runs"),
+            "name": f"error_sweep_{parameter}_{value:g}",
+            "exist_ok": True,
+        }
+        kwargs[parameter] = float(value)
+        if device is not None:
+            kwargs["device"] = device
+
+        metrics = model.val(**kwargs)
+        row = {"value": float(value)}
+        row.update(extract_metrics(metrics))
+        rows.append(row)
+
+    return rows
+
+
+def best_threshold(rows: list[dict[str, float]]) -> dict[str, float]:
+    """Return the sweep row with the highest mAP50-95."""
+    if not rows:
+        raise ValueError("No sweep rows available.")
+    return max(
+        rows,
+        key=lambda row: (row.get("mAP50-95", 0.0), row.get("mAP50", 0.0)),
+    )
+
+
+def plot_sweep(
+    rows: list[dict[str, float]],
+    parameter: str,
+    out_path: str | Path | None = None,
+) -> Path:
+    """Plot validation metrics against a confidence or IoU sweep."""
+    if not rows:
+        raise ValueError("No sweep rows to plot.")
+
+    out_path = (
+        Path(out_path)
+        if out_path is not None
+        else RESULTS_DIR / f"{parameter}_sweep.png"
+    )
+    values = [row["value"] for row in rows]
+
+    fig, ax = plt.subplots(figsize=(8, 4.5))
+    for metric in SWEEP_METRICS:
+        if metric not in rows[0]:
+            continue
+        ax.plot(
+            values,
+            [row[metric] for row in rows],
+            marker="o",
+            label=metric,
+        )
+    ax.set_xlabel(parameter)
+    ax.set_ylabel("Score")
+    ax.set_title(f"{parameter} threshold sweep")
+    ax.grid(alpha=0.3)
+    ax.legend()
+    fig.tight_layout()
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return out_path
+
+
 def save_analysis(
     analysis: dict[str, Any],
     out_path: str | Path = RESULTS_DIR / "error_analysis.json",
@@ -320,6 +419,7 @@ def save_analysis(
         json.dumps(analysis, indent=2) + "\n", encoding="utf-8"
     )
     return out_path
+
 
 def _markdown_table(headers: list[str], rows: list[list[Any]]) -> str:
     """Render a markdown table."""
@@ -340,9 +440,13 @@ def _score(value: float) -> str:
 
 def write_report(
     analysis: dict[str, Any],
+    conf_sweep: list[dict[str, float]] | None = None,
+    iou_sweep: list[dict[str, float]] | None = None,
     out_path: str | Path = RESULTS_DIR / "error_analysis.md",
 ) -> Path:
-    """Write a markdown report of false positives and negatives."""
+    """Write a markdown report of false positives, negatives, and sweeps."""
+    conf_sweep = conf_sweep or []
+    iou_sweep = iou_sweep or []
 
     lines = [
         "# Error analysis",
@@ -446,6 +550,34 @@ def write_report(
         )
     )
 
+    for title, rows, parameter in (
+        ("Confidence sweep", conf_sweep, "conf"),
+        ("IoU sweep", iou_sweep, "iou"),
+    ):
+        lines.extend(["", f"## {title}", ""])
+        if not rows:
+            lines.append("Not run.")
+            continue
+
+        best = best_threshold(rows)
+        lines.append(f"Best {parameter}: {best['value']:g}")
+        lines.append("")
+        lines.append(
+            _markdown_table(
+                [parameter, *SWEEP_METRICS],
+                [
+                    [
+                        f"{row['value']:g}",
+                        *[
+                            _score(row[metric]) if metric in row else "—"
+                            for metric in SWEEP_METRICS
+                        ],
+                    ]
+                    for row in rows
+                ],
+            )
+        )
+
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -454,7 +586,7 @@ def write_report(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Analyze YOLO false positives, false negatives, and errors."
+        description="Analyze YOLO false positives, negatives, and thresholds."
     )
     parser.add_argument(
         "--weights",
@@ -467,12 +599,19 @@ def main() -> None:
         default=DATA_DIR,
         help="Dataset root containing images/ and labels/.",
     )
+    parser.add_argument("--data", type=Path, default=None, help="Dataset YAML.")
     parser.add_argument("--split", default="val")
     parser.add_argument("--conf", type=float, default=DEFAULT_CONF)
     parser.add_argument("--iou", type=float, default=DEFAULT_IOU)
     parser.add_argument("--imgsz", type=int, default=DEFAULT_IMGSZ)
+    parser.add_argument("--batch", type=int, default=16)
     parser.add_argument("--device", default=None, help="'cpu' or a GPU index.")
     parser.add_argument("--iou-threshold", type=float, default=0.5)
+    parser.add_argument(
+        "--sweep",
+        action="store_true",
+        help="Run confidence and IoU validation sweeps.",
+    )
     parser.add_argument(
         "--out-md",
         type=Path,
@@ -496,8 +635,35 @@ def main() -> None:
         iou_threshold=args.iou_threshold,
     )
 
+    conf_sweep: list[dict[str, float]] = []
+    iou_sweep: list[dict[str, float]] = []
+    if args.sweep:
+        conf_sweep = sweep_thresholds(
+            weights=args.weights,
+            data=args.data,
+            parameter="conf",
+            imgsz=args.imgsz,
+            batch=args.batch,
+            device=args.device,
+        )
+        iou_sweep = sweep_thresholds(
+            weights=args.weights,
+            data=args.data,
+            parameter="iou",
+            imgsz=args.imgsz,
+            batch=args.batch,
+            device=args.device,
+        )
+        plot_sweep(conf_sweep, "conf", RESULTS_DIR / "conf_sweep.png")
+        plot_sweep(iou_sweep, "iou", RESULTS_DIR / "iou_sweep.png")
+
     json_path = save_analysis(analysis, args.out_json)
-    report_path = write_report(analysis, out_path=args.out_md)
+    report_path = write_report(
+        analysis,
+        conf_sweep=conf_sweep,
+        iou_sweep=iou_sweep,
+        out_path=args.out_md,
+    )
 
     print("Images:", analysis["images"])
     print("False positives:", analysis["false_positive_count"])
