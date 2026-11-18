@@ -169,7 +169,9 @@ train, tvmonitor
 ```
 
 All coordinates are normalized to `[0, 1]` relative to image width/height. Empty
-label files are valid and represent images with no annotated objects.
+label files are valid and represent images with no annotated objects. Objects
+marked `difficult` in the VOC XML and classes outside the 20-class list are
+skipped during conversion.
 
 ## Training Configuration
 
