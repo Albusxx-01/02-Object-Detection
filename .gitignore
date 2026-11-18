@@ -7,7 +7,7 @@ venv/
 data/
 datasets/
 runs/
-learnings/
+./learnings/
 
 models/*.pt
 models/*.pth
