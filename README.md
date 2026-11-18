@@ -277,3 +277,17 @@ gitignored.
 - `data/`, `models/*.pt`, `results/runs/`, `results/yolov8_results/`, and
   `results/*.zip` are gitignored.
 - Full VOC download is about 2.8 GB; the quick run downloads about 884 MB.
+
+## Troubleshooting
+
+- **Python 3.13**: install from `requirements.txt`; `ultralytics>=8.3` and
+  `torch>=2.2` provide compatible wheels.
+- **No GPU**: pass `--device cpu` to training, evaluation, inference, or error
+  analysis. Expect much slower runs; use a Colab T4 for full training.
+- **Missing checkpoint**: `models/*.pt` is gitignored. Download `yolov8n.pt` or
+  train a model to create `models/yolov8n_voc_best.pt`.
+- **Missing dataset**: run `python src/dataset.py --quick` first. Evaluation and
+  error analysis need `data/images/val` and labels; `data/dataset.yaml` is
+  generated on first use.
+- **`No images found` during error analysis**: the validation split is empty.
+  Prepare the dataset before rerunning the CLI.
