@@ -1,6 +1,9 @@
 """Global configuration for the Object Detection project."""
 
+from __future__ import annotations
+
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -60,7 +63,7 @@ def write_dataset_yaml(out_path: Path = DATASET_YAML_PATH) -> Path:
     return out_path
 
 
-def get_training_args() -> dict:
+def get_training_args() -> dict[str, Any]:
     """Return the training block with project/name resolved to absolute paths."""
     args = dict(TRAINING)
     project = Path(args.get("project", "results/runs"))

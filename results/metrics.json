@@ -1,0 +1,38 @@
+{
+  "run": "yolov8n_voc",
+  "model": "yolov8n.pt",
+  "dataset": "Pascal VOC 2007+2012 (20 classes)",
+  "epochs": 50,
+  "seed": 42,
+  "imgsz": 640,
+  "batch": 16,
+  "optimizer": "MuSGD (auto)",
+  "deterministic": true,
+  "best_epoch": 49,
+  "metrics": {
+    "precision": 0.81221,
+    "recall": 0.74878,
+    "mAP50": 0.826,
+    "mAP50-95": 0.61726
+  },
+  "final_epoch": {
+    "epoch": 50,
+    "precision": 0.80712,
+    "recall": 0.75225,
+    "mAP50": 0.82563,
+    "mAP50-95": 0.61684
+  },
+  "weights": "models/yolov8n_voc_best.pt",
+  "weights_note": "checkpoint is gitignored; reproduce with results/train_config.yaml",
+  "artifacts": {
+    "training_curves": "results/training_curves.png",
+    "pr_curve": "results/BoxPR_curve.png",
+    "f1_curve": "results/BoxF1_curve.png",
+    "precision_curve": "results/BoxP_curve.png",
+    "recall_curve": "results/BoxR_curve.png",
+    "confusion_matrix": "results/confusion_matrix.png",
+    "confusion_matrix_normalized": "results/confusion_matrix_normalized.png",
+    "results_csv": "results/results.csv",
+    "samples": "results/samples/"
+  }
+}

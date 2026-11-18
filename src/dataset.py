@@ -6,13 +6,15 @@ import argparse
 import random
 import shutil
 import urllib.request
+import xml.etree.ElementTree as ET
 import zipfile
 from collections import Counter
 from pathlib import Path
-import xml.etree.ElementTree as ET
+from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.axes import Axes
 from PIL import Image, ImageDraw
 
 from config import CLASS_NAMES, DATA_DIR
@@ -312,7 +314,7 @@ def dataset_stats(
     data_dir: Path = DATA_DIR,
     split: str = "train",
     class_names: list[str] = CLASS_NAMES,
-) -> dict:
+) -> dict[str, Any]:
     """Compute class counts, boxes-per-image, and normalized box sizes."""
     labels_dir = Path(data_dir) / "labels" / split
     label_files = sorted(labels_dir.glob("*.txt"))
@@ -332,17 +334,18 @@ def dataset_stats(
             box_sizes.append((float(width), float(height)))
 
     sizes = np.array(box_sizes) if box_sizes else np.zeros((0, 2))
-    counts = [int(boxes_per_image.count(value)) for value in range(
-        int(max(boxes_per_image, default=0)) + 1
-    )]
+    max_boxes = int(max(boxes_per_image, default=0))
+    counts = [boxes_per_image.count(value) for value in range(max_boxes + 1)]
 
     return {
         "split": split,
         "images": len(label_files),
         "images_with_objects": images_with_objects,
         "boxes": int(sum(boxes_per_image)),
-        "boxes_per_image_mean": float(np.mean(boxes_per_image)) if boxes_per_image else 0.0,
-        "boxes_per_image_max": int(max(boxes_per_image, default=0)),
+        "boxes_per_image_mean": (
+            float(np.mean(boxes_per_image)) if boxes_per_image else 0.0
+        ),
+        "boxes_per_image_max": max_boxes,
         "boxes_per_image_histogram": counts,
         "class_counts": {
             name: int(class_counts.get(name, 0)) for name in class_names
@@ -361,7 +364,13 @@ def draw_boxes(
     width, height = image.size
     draw = ImageDraw.Draw(image)
 
-    for class_id, x_center, y_center, box_width, box_height in load_label_file(label_path):
+    for (
+        class_id,
+        x_center,
+        y_center,
+        box_width,
+        box_height,
+    ) in load_label_file(label_path):
         class_id = int(class_id)
         x1 = (x_center - box_width / 2.0) * width
         y1 = (y_center - box_height / 2.0) * height
@@ -386,8 +395,8 @@ def visualize_sample(
     image_path: Path,
     label_path: Path,
     class_names: list[str] = CLASS_NAMES,
-    ax=None,
-):
+    ax: Axes | None = None,
+) -> Axes:
     """Plot one image with its boxes, optionally on an existing axis."""
     image = draw_boxes(image_path, label_path, class_names)
 
