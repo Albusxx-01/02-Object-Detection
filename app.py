@@ -5,6 +5,8 @@ from __future__ import annotations
 import io
 import json
 import sys
+import tempfile
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +37,7 @@ DEFAULT_MAX_DET = int(INFERENCE.get("max_det", 300))
 DEFAULT_WEIGHTS = "models/yolov8n_voc_best.pt"
 
 IMAGE_TYPES = ["bmp", "jpeg", "jpg", "png", "tif", "tiff", "webp"]
+VIDEO_TYPES = ["avi", "m4v", "mkv", "mov", "mp4", "mpeg", "mpg", "webm"]
 
 
 def available_weights() -> list[str]:
@@ -101,6 +104,16 @@ def detection_frame(records: list[dict[str, Any]]) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=columns)
 
 
+def class_summary_frame(records: list[dict[str, Any]]) -> pd.DataFrame:
+    """Aggregate video detections by class."""
+    counts = Counter(record["class_name"] for record in records)
+    rows = [
+        {"class": name, "detections": count}
+        for name, count in counts.most_common()
+    ]
+    return pd.DataFrame(rows, columns=["class", "detections"])
+
+
 def detections_json(records: list[dict[str, Any]]) -> str:
     """Serialize detections for download."""
     return json.dumps(records, indent=2) + "\n"
@@ -164,6 +177,130 @@ def render_image_result(
     )
 
 
+def process_video(
+    model: Any,
+    source: Path,
+    out_path: Path,
+    names: list[str],
+    conf: float,
+    iou: float,
+    imgsz: int,
+    class_ids: list[int],
+    progress: Any,
+) -> tuple[int, list[dict[str, Any]]]:
+    """Annotate a video frame by frame and collect detections."""
+    capture = cv2.VideoCapture(str(source))
+    if not capture.isOpened():
+        raise ValueError(f"Could not open video: {source}")
+
+    fps = capture.get(cv2.CAP_PROP_FPS) or 25.0
+    width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    total = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+    writer = cv2.VideoWriter(
+        str(out_path),
+        cv2.VideoWriter_fourcc(*"mp4v"),
+        fps,
+        (width, height),
+    )
+
+    records: list[dict[str, Any]] = []
+    frames = 0
+    try:
+        while True:
+            success, frame = capture.read()
+            if not success:
+                break
+
+            result = model.predict(
+                source=frame,
+                conf=conf,
+                iou=iou,
+                imgsz=imgsz,
+                max_det=DEFAULT_MAX_DET,
+                classes=class_ids or None,
+                verbose=False,
+            )[0]
+            writer.write(result.plot())
+
+            for record in detection_records(result, names):
+                record["frame"] = frames
+                records.append(record)
+
+            frames += 1
+            if total > 0:
+                progress.progress(min(frames / total, 1.0))
+    finally:
+        capture.release()
+        writer.release()
+
+    return frames, records
+
+
+def render_video_result(
+    model: Any,
+    uploaded: Any,
+    names: list[str],
+    conf: float,
+    iou: float,
+    imgsz: int,
+    class_ids: list[int],
+) -> None:
+    """Process an uploaded video and render the annotated result."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        source = Path(temp_dir) / Path(uploaded.name).name
+        source.write_bytes(uploaded.getbuffer())
+        out_video = source.with_name(f"{source.stem}_annotated.mp4")
+
+        progress = st.progress(0.0)
+        with st.spinner("Processing video..."):
+            frames, records = process_video(
+                model,
+                source,
+                out_video,
+                names,
+                conf,
+                iou,
+                imgsz,
+                class_ids,
+                progress,
+            )
+        progress.empty()
+
+        if frames == 0 or not out_video.exists():
+            st.error("No frames could be processed from this video.")
+            return
+
+        video_bytes = out_video.read_bytes()
+        st.video(video_bytes)
+        st.caption(f"Processed {frames} frames, {len(records)} detections.")
+
+        st.subheader("Detections by class")
+        if records:
+            st.dataframe(
+                class_summary_frame(records),
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.info("No objects detected with the current thresholds.")
+
+        st.download_button(
+            "Download detections (JSON)",
+            data=detections_json(records),
+            file_name=f"{source.stem}_detections.json",
+            mime="application/json",
+            key="video_json",
+        )
+        st.download_button(
+            "Download annotated video",
+            data=video_bytes,
+            file_name=f"{source.stem}_annotated.mp4",
+            mime="video/mp4",
+            key="video_file",
+        )
+
+
 def main() -> None:
     st.set_page_config(page_title="Object Detection", layout="wide")
     st.title("Object Detection with YOLOv8")
@@ -194,6 +331,12 @@ def main() -> None:
         value=DEFAULT_IOU,
         step=0.01,
     )
+    selected = st.sidebar.multiselect("Classes", names, default=names)
+    if not selected:
+        st.warning("Select at least one class to run detection.")
+        st.stop()
+
+    class_ids = [names.index(name) for name in selected]
     st.sidebar.caption(f"{len(names)} classes loaded from `{weights}`.")
 
     image_tab, camera_tab, video_tab = st.tabs(["Image", "Camera", "Video"])
@@ -212,7 +355,7 @@ def main() -> None:
                 conf,
                 iou,
                 DEFAULT_IMGSZ,
-                [],
+                class_ids,
                 key="image",
             )
 
@@ -227,12 +370,22 @@ def main() -> None:
                 conf,
                 iou,
                 DEFAULT_IMGSZ,
-                [],
+                class_ids,
                 key="camera",
             )
 
     with video_tab:
-        st.info("Video detection is added in a later commit.")
+        uploaded_video = st.file_uploader("Upload a video", type=VIDEO_TYPES)
+        if uploaded_video is not None:
+            render_video_result(
+                model,
+                uploaded_video,
+                names,
+                conf,
+                iou,
+                DEFAULT_IMGSZ,
+                class_ids,
+            )
 
 
 if __name__ == "__main__":
