@@ -18,8 +18,8 @@ segmentation → GANs → face recognition.
 | YOLOv8 training + quick validation + loss/mAP curves | Implemented (`src/train.py`, notebook 01) |
 | Full VOC training run | Done — 50 epochs, mAP@0.5 0.826 |
 | Evaluation CLI + notebook (PR curves, per-class mAP, confusion matrix) | Implemented (`src/evaluate.py`, notebook 02) |
-| Error-analysis notebook | Planned |
-| Inference CLI (image / video / webcam) | Planned |
+| Error-analysis CLI + notebook | Implemented (`src/error_analysis.py`, notebook 03; findings pending local VOC data) |
+| Inference CLI (image / video / webcam) | Done (`src/infer.py`) |
 | Streamlit app (image / camera / video) | Done (`app.py`) |
 
 ## Quick Start (Google Colab)
@@ -100,10 +100,12 @@ artifacts into `results/`. `src/loss.py` writes `results/loss_curves.png`.
 │   ├── train.py                # training wrapper with run directories
 │   ├── evaluate.py             # mAP metrics and artifact export
 │   ├── loss.py                 # loss-curve plotting
-│   └── infer.py                # planned: image/video/webcam inference
+│   ├── error_analysis.py       # FP/FN ranking and threshold sweeps
+│   └── infer.py                # image/video/webcam inference
 ├── notebooks/
 │   ├── 01-data-and-training.ipynb
-│   └── 02-evaluation.ipynb
+│   ├── 02-evaluation.ipynb
+│   └── 03-error-analysis.ipynb
 ├── data/                       # generated, gitignored
 │   ├── images/{train,val}/
 │   ├── labels/{train,val}/
@@ -196,16 +198,26 @@ accuracy higher at the cost of speed.
 - Confusion matrix
 - Validation speed per image
 
-Error analysis for false positives and false negatives is planned for
-`03-error-analysis.ipynb`.
+Error analysis for false positives, false negatives, class confusion, and
+confidence/IoU sweeps is implemented in `src/error_analysis.py` and
+`notebooks/03-error-analysis.ipynb`. Generate `results/error_analysis.md` once
+the VOC validation split and a checkpoint are available:
 
-## Inference and App
+```bash
+python src/error_analysis.py --weights models/yolov8n_voc_best.pt --sweep
+```
 
-Planned:
+## Inference
 
-- `src/infer.py` — image, video, and webcam inference with JSON detections
-- `app.py` — Streamlit UI with image, camera, and video tabs, confidence/IoU
-  sliders, class filtering, and result download
+```bash
+python src/infer.py --source path/to/image.jpg --weights models/yolov8n_voc_best.pt
+python src/infer.py --source path/to/video.mp4 --weights models/yolov8n_voc_best.pt
+python src/infer.py --source 0 --weights models/yolov8n_voc_best.pt
+```
+
+`--conf`, `--iou`, and `--save/--no-save` control detection. Annotated media and
+JSON detections are written to `results/predictions/`. Webcam inference uses
+source `0` and needs a camera and display.
 
 ## Streamlit App
 
