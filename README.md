@@ -20,7 +20,7 @@ segmentation → GANs → face recognition.
 | Evaluation CLI + notebook (PR curves, per-class mAP, confusion matrix) | Implemented (`src/evaluate.py`, notebook 02) |
 | Error-analysis notebook | Planned |
 | Inference CLI (image / video / webcam) | Planned |
-| Streamlit app | Planned |
+| Streamlit app (image / camera / video) | Done (`app.py`) |
 
 ## Quick Start (Google Colab)
 
@@ -89,6 +89,7 @@ artifacts into `results/`. `src/loss.py` writes `results/loss_curves.png`.
 
 ```
 02-Object-Detection/
+├── app.py                      # Streamlit UI for image/camera/video detection
 ├── config/
 │   ├── detection.yaml          # dataset paths, class names, hyperparameters
 │   └── classes.yaml            # class id -> name map
@@ -206,6 +207,23 @@ Planned:
 - `app.py` — Streamlit UI with image, camera, and video tabs, confidence/IoU
   sliders, class filtering, and result download
 
+## Streamlit App
+
+```bash
+streamlit run app.py
+```
+
+The sidebar selects the checkpoint, confidence, NMS IoU, and classes. The
+**Image**, **Camera**, and **Video** tabs run detection, show the annotated
+result and a detection table, and offer JSON downloads. The video tab also
+exports the annotated MP4. Video processing runs frame by frame and is much
+slower than image inference on CPU.
+
+The app requires `streamlit` and `opencv-python`, both listed in
+`requirements.txt`. If a checkpoint is missing, choose another weight or train
+or download one first; the app reports the load error instead of falling back
+silently.
+
 ## Results
 
 Full official VOC split, 50 epochs, seed 42, best checkpoint at epoch 49.
@@ -238,7 +256,7 @@ gitignored.
 - [x] Milestone 2 — Config + anchor analysis
 - [x] Milestone 3 — Training notebook, quick validation, loss/mAP curves
 - [x] Milestone 4 — Evaluation pipeline (mAP, PR curves, per-class report)
-- [ ] Milestone 5 — Inference CLI and Streamlit app
+- [x] Milestone 5 — Inference CLI and Streamlit app
 - [ ] Milestone 6 — Full training run, results, final documentation
 
 ## Notes
