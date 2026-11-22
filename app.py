@@ -87,6 +87,18 @@ def annotated_image(result: Any) -> np.ndarray:
     return cv2.cvtColor(result.plot(), cv2.COLOR_BGR2RGB)
 
 
+def capture_webcam_frame(camera_index: int = 0) -> Image.Image:
+    """Grab a single frame from a webcam attached to the app host."""
+    capture = cv2.VideoCapture(camera_index)
+    try:
+        success, frame = capture.read()
+    finally:
+        capture.release()
+    if not success or frame is None:
+        raise ValueError(f"Could not read from camera {camera_index}.")
+    return Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+
+
 def detection_frame(records: list[dict[str, Any]]) -> pd.DataFrame:
     """Build a tidy detection table for display."""
     columns = ["class", "confidence", "x1", "y1", "x2", "y2"]
@@ -361,8 +373,32 @@ def main() -> None:
 
     with camera_tab:
         photo = st.camera_input("Take a photo")
+        st.caption(
+            "Browser camera requires localhost or HTTPS. Use the button below "
+            "to capture from the webcam attached to the machine running the app."
+        )
+        camera_index = st.number_input(
+            "Webcam index",
+            min_value=0,
+            max_value=9,
+            value=0,
+            step=1,
+        )
+        if st.button("Capture from local webcam"):
+            try:
+                st.session_state["camera_frame"] = capture_webcam_frame(
+                    int(camera_index)
+                )
+            except (ValueError, OSError) as error:
+                st.error(str(error))
+
+        image = None
         if photo is not None:
             image = Image.open(photo).convert("RGB")
+        elif "camera_frame" in st.session_state:
+            image = st.session_state["camera_frame"]
+
+        if image is not None:
             render_image_result(
                 model,
                 image,
