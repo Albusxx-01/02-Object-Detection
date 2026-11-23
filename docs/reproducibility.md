@@ -46,7 +46,9 @@ uses 50 epochs and produces the metrics recorded in `README.md`.
 - `results/metrics.json` — validation metrics and per-class AP
 - `results/BoxPR_curve.png`, `results/confusion_matrix.png` — evaluation plots
 - `results/loss_curves.png` — training losses from `results.csv`
-- `results/error_analysis.md` — failure analysis after the VOC val split exists
+- `results/error_analysis.md`, `results/error_analysis.json` — failure analysis
+- `results/threshold_sweeps.png`, `results/conf_sweep.png`,
+  `results/iou_sweep.png` — confidence and IoU sweep plots
 
 ## Notes
 

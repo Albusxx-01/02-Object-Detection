@@ -7,6 +7,8 @@ venv/
 data/
 datasets/
 runs/
+learnings/
+pre-build docs/
 
 models/*.pt
 models/*.pth

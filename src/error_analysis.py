@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 from collections import Counter
 from pathlib import Path
 from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
+import yaml
 
-from config import DATA_DIR, INFERENCE, RESULTS_DIR
+from config import CLASS_NAMES, DATA_DIR, INFERENCE, RESULTS_DIR
 from dataset import load_label_file
 from evaluate import extract_metrics
 from model import class_names, load_model
@@ -186,7 +188,7 @@ def collect_error_analysis(
     total_true_positives = 0
 
     results = model.predict(
-        source=[str(path) for path in image_paths],
+        source=str(images_dir / "*.jpg"),
         stream=True,
         **predict_args,
     )
@@ -316,6 +318,46 @@ def collect_error_analysis(
     }
 
 
+def prepare_sweep_dataset(
+    data_dir: str | Path = DATA_DIR,
+    split: str = "val",
+    limit: int = 500,
+    out_dir: str | Path = DATA_DIR / "sweeps",
+) -> Path:
+    """Create a fixed validation subset and dataset YAML for threshold sweeps."""
+    data_dir = Path(data_dir)
+    out_dir = Path(out_dir)
+    images_dir = data_dir / "images" / split
+    labels_dir = data_dir / "labels" / split
+    image_paths = sorted(images_dir.glob("*.jpg"))[:limit]
+    if not image_paths:
+        raise FileNotFoundError(f"No images found in {images_dir}")
+
+    subset_images = out_dir / "images" / split
+    subset_labels = out_dir / "labels" / split
+    for directory in (subset_images, subset_labels):
+        if directory.exists():
+            shutil.rmtree(directory)
+        directory.mkdir(parents=True, exist_ok=True)
+
+    for image_path in image_paths:
+        shutil.copy2(image_path, subset_images / image_path.name)
+        label_path = labels_dir / f"{image_path.stem}.txt"
+        if label_path.exists():
+            shutil.copy2(label_path, subset_labels / label_path.name)
+
+    data_path = out_dir / "dataset.yaml"
+    payload = {
+        "path": str(out_dir.resolve()),
+        "train": f"images/{split}",
+        "val": f"images/{split}",
+        "test": f"images/{split}",
+        "names": {index: name for index, name in enumerate(CLASS_NAMES)},
+    }
+    data_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    return data_path
+
+
 def sweep_thresholds(
     weights: str | Path = "models/yolov8n_voc_best.pt",
     data: str | Path | None = None,
@@ -443,6 +485,7 @@ def write_report(
     conf_sweep: list[dict[str, float]] | None = None,
     iou_sweep: list[dict[str, float]] | None = None,
     out_path: str | Path = RESULTS_DIR / "error_analysis.md",
+    sweep_note: str | None = None,
 ) -> Path:
     """Write a markdown report of false positives, negatives, and sweeps."""
     conf_sweep = conf_sweep or []
@@ -454,6 +497,10 @@ def write_report(
         f"- Weights: `{analysis['weights']}`",
         f"- Split: `{analysis['split']}`",
         f"- Images: {analysis['images']}",
+    ]
+    if sweep_note:
+        lines.append(f"- Sweep subset: {sweep_note}")
+    lines.extend([
         "",
         "## Summary",
         "",
@@ -472,7 +519,7 @@ def write_report(
         "",
         "## Top false positives by confidence",
         "",
-    ]
+    ])
 
     if analysis["false_positives"]:
         lines.append(
@@ -613,6 +660,12 @@ def main() -> None:
         help="Run confidence and IoU validation sweeps.",
     )
     parser.add_argument(
+        "--sweep-limit",
+        type=int,
+        default=None,
+        help="Cap validation images used for sweeps via a fixed subset.",
+    )
+    parser.add_argument(
         "--out-md",
         type=Path,
         default=RESULTS_DIR / "error_analysis.md",
@@ -637,10 +690,24 @@ def main() -> None:
 
     conf_sweep: list[dict[str, float]] = []
     iou_sweep: list[dict[str, float]] = []
+    sweep_data = args.data
+    sweep_note = None
     if args.sweep:
+        if args.sweep_limit is not None:
+            sweep_data = prepare_sweep_dataset(
+                data_dir=args.data_dir,
+                split=args.split,
+                limit=args.sweep_limit,
+            )
+            sweep_note = (
+                f"first {args.sweep_limit} images from "
+                f"{Path(args.data_dir) / 'images' / args.split}"
+            )
+            print("Sweep dataset:", sweep_data)
+
         conf_sweep = sweep_thresholds(
             weights=args.weights,
-            data=args.data,
+            data=sweep_data,
             parameter="conf",
             imgsz=args.imgsz,
             batch=args.batch,
@@ -648,7 +715,7 @@ def main() -> None:
         )
         iou_sweep = sweep_thresholds(
             weights=args.weights,
-            data=args.data,
+            data=sweep_data,
             parameter="iou",
             imgsz=args.imgsz,
             batch=args.batch,
@@ -663,6 +730,7 @@ def main() -> None:
         conf_sweep=conf_sweep,
         iou_sweep=iou_sweep,
         out_path=args.out_md,
+        sweep_note=sweep_note,
     )
 
     print("Images:", analysis["images"])

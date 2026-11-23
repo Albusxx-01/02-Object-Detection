@@ -18,7 +18,7 @@ segmentation → GANs → face recognition.
 | YOLOv8 training + quick validation + loss/mAP curves | Implemented (`src/train.py`, notebook 01) |
 | Full VOC training run | Done — 50 epochs, mAP@0.5 0.826 |
 | Evaluation CLI + notebook (PR curves, per-class mAP, confusion matrix) | Implemented (`src/evaluate.py`, notebook 02) |
-| Error-analysis CLI + notebook | Implemented (`src/error_analysis.py`, notebook 03; findings pending local VOC data) |
+| Error-analysis CLI + notebook | Done — full VOC val, precision 0.748 / recall 0.819 (`src/error_analysis.py`, notebook 03) |
 | Inference CLI (image / video / webcam) | Done (`src/infer.py`) |
 | Streamlit app (image / camera / video) | Done (`app.py`) |
 
@@ -202,8 +202,13 @@ accuracy higher at the cost of speed.
 
 Error analysis for false positives, false negatives, class confusion, and
 confidence/IoU sweeps is implemented in `src/error_analysis.py` and
-`notebooks/03-error-analysis.ipynb`. Generate `results/error_analysis.md` once
-the VOC validation split and a checkpoint are available:
+`notebooks/03-error-analysis.ipynb`. On the full VOC2007 test split (4,952
+images) the model reaches precision **0.748** and recall **0.819** at conf 0.25
+and IoU 0.45, with 3,315 false positives and 2,172 false negatives. Recall falls
+with object size: tiny 0.630, small 0.751, medium 0.842, large 0.904. Reports
+are written to `results/error_analysis.md` and `results/error_analysis.json`.
+
+Regenerate with:
 
 ```bash
 python src/error_analysis.py --weights models/yolov8n_voc_best.pt --sweep
